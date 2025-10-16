@@ -6,6 +6,31 @@
   <title>DevOps Ninja Program – Beta</title>
   <link rel="stylesheet" href="style.css" />
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet"/>
+  <style>
+    /* Minimal inline styles for placeholders */
+    .placeholder-avatar {
+      width: 80px;
+      height: 80px;
+      background-color: #ccc;
+      border-radius: 50%;
+      margin: 0 auto 10px;
+    }
+    .testimonial {
+      max-width: 350px;
+      margin: 1rem auto;
+      padding: 1rem;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      text-align: center;
+      font-style: italic;
+      color: #444;
+    }
+    .instructor .placeholder-avatar {
+      width: 120px;
+      height: 120px;
+      margin-bottom: 15px;
+    }
+  </style>
 </head>
 <body>
 
@@ -56,20 +81,20 @@
     <h2>What Others Are Saying</h2>
     <div class="testimonials">
       <div class="testimonial">
-        <img src="shell.jpg" alt="Student 1" />
+        <div class="placeholder-avatar"></div>
         <p>“The roadmap gave me clarity and direction in my DevOps journey.”</p>
       </div>
       <div class="testimonial">
-        <img src="shell2.jpg" alt="Student 2" />
+        <div class="placeholder-avatar"></div>
         <p>“Even the free demo session was packed with valuable insights.”</p>
       </div>
     </div>
   </section>
 
   <!-- Instructor Section (No Image) -->
-  <section class="instructor">
+  <section class="instructor" style="text-align:center;">
     <h2>Meet the Mentor</h2>
-    <div style="width: 120px; height: 120px; margin: 0 auto 15px; border-radius: 50%; background-color: #ddd;"></div>
+    <div class="placeholder-avatar"></div>
     <p>Learn from an experienced DevOps engineer with years of industry experience and a passion for teaching future professionals.</p>
   </section>
 
