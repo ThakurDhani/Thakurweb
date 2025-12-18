@@ -42,16 +42,16 @@ def call(Map config = [:]) {
 
             stage('Install Poetry') {
                 sh '''
-                   sudo python3.11 -m pip install --user poetry
-                   sudo export PATH="$HOME/.local/bin:$PATH"
+                    python3.11 -m pip install --user poetry
+                    export PATH="$HOME/.local/bin:$PATH"
                     poetry --version
                 '''
             }
 
             stage('Install System Dependencies') {
                 sh '''
-                     apt-get update -y
-                     apt-get install -y build-essential libpq-dev
+                    sudo apt-get update -y
+                    sudo apt-get install -y build-essential libpq-dev
                 '''
             }
 
