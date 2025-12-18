@@ -20,11 +20,11 @@ def call(Map config = [:]) {
 
             stage('Install Python 3.11') {
                 sh '''
-                    sudo apt-get update -y
-                    sudo apt-get install -y software-properties-common
-                    sudo add-apt-repository ppa:deadsnakes/ppa -y
-                    sudo apt-get update -y
-                    sudo apt-get install -y \
+                     apt-get update -y
+                     apt-get install -y software-properties-common
+                     add-apt-repository ppa:deadsnakes/ppa -y
+                     apt-get update -y
+                     apt-get install -y \
                         python3.11 \
                         python3.11-venv \
                         python3.11-distutils \
@@ -50,8 +50,8 @@ def call(Map config = [:]) {
 
             stage('Install System Dependencies') {
                 sh '''
-                    sudo apt-get update -y
-                    sudo apt-get install -y build-essential libpq-dev
+                     apt-get update -y
+                     apt-get install -y build-essential libpq-dev
                 '''
             }
 
