@@ -2,74 +2,71 @@ def call(Map config = [:]) {
 
     node {
 
-        environment {
-            PYENV_ROOT = "${env.HOME}/.pyenv"
-            PATH = "${env.HOME}/.local/bin:${env.HOME}/.pyenv/shims:${env.HOME}/.pyenv/bin:${env.PATH}"
+        def HOME = sh(script: "echo \$HOME", returnStdout: true).trim()
+        def PYENV_ROOT = "${HOME}/.pyenv"
+
+        stage('Checkout') {
+            git branch: config.branch ?: 'main', url: config.repoUrl
         }
 
-        def repoUrl     = config.repoUrl
-        def branch      = config.branch ?: 'main'
-        def projectName = config.projectName ?: 'Python Code Coverage'
+        stage('Setup Python 3.11 (PyEnv)') {
+            sh """
+                # define variables properly
+                export PYENV_ROOT="${PYENV_ROOT}"
+                export PATH="${PYENV_ROOT}/bin:\$PATH"
 
-        if (!repoUrl) {
-            error "repoUrl is required"
+                # if pyenv exists, skip install
+                if [ -d "${PYENV_ROOT}" ]; then
+                    echo "pyenv exists → skipping install"
+                else
+                    curl https://pyenv.run | bash
+                fi
+
+                # activate pyenv
+                eval "\$(pyenv init -)"
+
+                # install python 3.11 only if missing
+                if ! pyenv versions | grep -q "3.11.8"; then
+                    pyenv install 3.11.8
+                else
+                    echo "Python 3.11.8 exists → skipping install"
+                fi
+
+                pyenv global 3.11.8
+                python3.11 --version
+            """
         }
 
-        def status = 'SUCCESS'
+        stage('Install Pip + Poetry') {
+            sh """
+                export PYENV_ROOT="${PYENV_ROOT}"
+                export PATH="${PYENV_ROOT}/shims:${PYENV_ROOT}/bin:${HOME}/.local/bin:\$PATH"
 
-        try {
-            stage('Checkout') {
-                git branch: branch, url: repoUrl
-            }
+                curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
+                python3.11 -m pip install --user poetry
 
-            stage('Setup Python 3.11 (PyEnv)') {
-                sh '''
-                    if [ ! -d "$PYENV_ROOT" ]; then
-                        curl https://pyenv.run | bash
-                    fi
+                poetry --version
+            """
+        }
 
-                    eval "$(pyenv init -)"
-                    if ! pyenv versions | grep -q "3.11.8"; then
-                        pyenv install 3.11.8
-                    fi
-                    pyenv global 3.11.8
+        stage('Install Dependencies') {
+            sh """
+                export PYENV_ROOT="${PYENV_ROOT}"
+                export PATH="${PYENV_ROOT}/shims:${PYENV_ROOT}/bin:${HOME}/.local/bin:\$PATH"
 
-                    python3.11 --version
-                '''
-            }
+                poetry config virtualenvs.create true
+                poetry config virtualenvs.in-project true
+                poetry install --no-root
+            """
+        }
 
-            stage('Install Poetry') {
-                sh '''
-                    python3.11 -m pip install --upgrade pip
-                    python3.11 -m pip install --user poetry
-                    which poetry
-                    poetry --version
-                '''
-            }
+        stage('Run Code Coverage') {
+            sh """
+                export PYENV_ROOT="${PYENV_ROOT}"
+                export PATH="${PYENV_ROOT}/shims:${PYENV_ROOT}/bin:${HOME}/.local/bin:\$PATH"
 
-            stage('Install Dependencies') {
-                sh '''
-                    poetry config virtualenvs.create true
-                    poetry config virtualenvs.in-project true
-                    poetry install --no-root
-                '''
-            }
-
-            stage('Run Code Coverage') {
-                sh '''
-                    poetry run pytest \
-                        --cov=. \
-                        --cov-report=xml \
-                        --cov-report=term
-                '''
-            }
-
-        } catch (err) {
-            status = 'FAILURE'
-            throw err
-
-        } finally {
-            // Slack and mail unchanged…
+                poetry run pytest --cov=. --cov-report=xml --cov-report=term
+            """
         }
     }
 }
