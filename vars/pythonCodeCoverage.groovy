@@ -18,46 +18,47 @@ def call(Map config = [:]) {
                 git branch: branch, url: repoUrl
             }
 
-            stage('Install Python 3.11') {
+            stage('Setup Python 3.11 (PyEnv)') {
                 sh '''
-                    sudo apt-get update -y
-                    sudo apt-get install -y software-properties-common
-                    sudo add-apt-repository ppa:deadsnakes/ppa -y
-                    sudo apt-get update -y
-                    sudo apt-get install -y \
-                        python3.11 \
-                        python3.11-venv \
-                        python3.11-distutils \
-                        python3.11-dev
+                    # download pyenv if not present
+                    if [ ! -d "$HOME/.pyenv" ]; then
+                        curl https://pyenv.run | bash
+                    fi
+
+                    export PYENV_ROOT="$HOME/.pyenv"
+                    export PATH="$PYENV_ROOT/bin:$PATH"
+
+                    eval "$(pyenv init -)"
+
+                    # install python 3.11 if not present
+                    if ! pyenv versions | grep -q "3.11"; then
+                        pyenv install 3.11.8
+                    fi
+
+                    pyenv global 3.11.8
+
                     python3.11 --version
                 '''
             }
 
-            stage('Install pip') {
+            stage('Install Pip + Poetry') {
                 sh '''
+                    export PYENV_ROOT="$HOME/.pyenv"
+                    export PATH="$PYENV_ROOT/shims:$PATH"
+
                     curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
-                    python3.11 -m pip --version
-                '''
-            }
+                    python3.11 -m pip install --upgrade pip
+                    python3.11 -m pip install poetry
 
-            stage('Install Poetry') {
-                sh '''
-                    python3.11 -m pip install --user poetry
-                    export PATH="$HOME/.local/bin:$PATH"
                     poetry --version
-                '''
-            }
-
-            stage('Install System Dependencies') {
-                sh '''
-                    sudo apt-get update -y
-                    sudo apt-get install -y build-essential libpq-dev
                 '''
             }
 
             stage('Install Dependencies') {
                 sh '''
-                    export PATH="$HOME/.local/bin:$PATH"
+                    export PYENV_ROOT="$HOME/.pyenv"
+                    export PATH="$PYENV_ROOT/shims:$PATH"
+
                     poetry config virtualenvs.create true
                     poetry config virtualenvs.in-project true
                     poetry install --no-root
@@ -66,7 +67,8 @@ def call(Map config = [:]) {
 
             stage('Run Code Coverage') {
                 sh '''
-                    export PATH="$HOME/.local/bin:$PATH"
+                    export PYENV_ROOT="$HOME/.pyenv"
+                    export PATH="$PYENV_ROOT/shims:$PATH"
                     export PYTHONPATH=$(pwd)
 
                     poetry run pytest \
@@ -84,9 +86,6 @@ def call(Map config = [:]) {
 
         } finally {
 
-            // =================================================
-            // Notifications
-            // =================================================
             def timestamp = sh(
                 script: "TZ=Asia/Kolkata date +'%Y-%m-%d %H:%M:%S'",
                 returnStdout: true
@@ -103,14 +102,12 @@ Build URL:
 ${env.BUILD_URL}
 """
 
-            // Slack Notification
             slackSend(
                 channel: config.slackChannel ?: '#jenkins-alerts',
                 message: message,
                 tokenCredentialId: config.slackTokenId ?: 'slack-token'
             )
 
-            // Email Notification
             try {
                 mail(
                     to: config.emailRecipients ?: 'rule29breaker@gmail.com',
