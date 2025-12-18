@@ -1,98 +1,116 @@
 def call(Map config = [:]) {
 
-    node {
+    podTemplate(
+        containers: [
+            containerTemplate(
+                name: 'python',
+                image: 'python:3.11-slim',
+                ttyEnabled: true,
+                command: 'cat'
+            )
+        ]
+    ) {
 
-        def repoUrl     = config.repoUrl
-        def branch      = config.branch ?: 'main'
-        def projectName = config.projectName ?: 'Python Code Coverage'
+        node(POD_LABEL) {
 
-        if (!repoUrl) {
-            error "repoUrl is required"
-        }
+            def repoUrl     = config.repoUrl
+            def branch      = config.branch ?: 'main'
+            def projectName = config.projectName ?: 'Python Code Coverage'
 
-        def status = 'SUCCESS'
-
-        try {
-
-            stage('Checkout') {
-                git branch: branch, url: repoUrl
+            if (!repoUrl) {
+                error "repoUrl is required"
             }
 
-            stage('Install Python 3.11') {
-                sh '''
-                     apt-get update -y
-                     apt-get install -y software-properties-common
-                     add-apt-repository ppa:deadsnakes/ppa -y
-                     apt-get update -y
-                     apt-get install -y \
-                        python3.11 \
-                        python3.11-venv \
-                        python3.11-distutils \
-                        python3.11-dev
-                    python3.11 --version
-                '''
-            }
+            def status = 'SUCCESS'
 
-            stage('Install pip') {
-                sh '''
-                    curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11
-                    python3.11 -m pip --version
-                '''
-            }
+            try {
 
-            stage('Install Poetry') {
-                sh '''
-                    python3.11 -m pip install --user poetry
-                    export PATH="$HOME/.local/bin:$PATH"
-                    poetry --version
-                '''
-            }
+                /* =======================================================
+                   CHECKOUT
+                ======================================================= */
+                stage('Checkout') {
+                    git branch: branch, url: repoUrl
+                }
 
-            stage('Install System Dependencies') {
-                sh '''
-                     apt-get update -y
-                     apt-get install -y build-essential libpq-dev
-                '''
-            }
+                /* =======================================================
+                   PYTHON VERSION
+                ======================================================= */
+                stage('Verify Python') {
+                    container('python') {
+                        sh "python3 --version"
+                    }
+                }
 
-            stage('Install Dependencies') {
-                sh '''
-                    export PATH="$HOME/.local/bin:$PATH"
-                    poetry config virtualenvs.create true
-                    poetry config virtualenvs.in-project true
-                    poetry install --no-root
-                '''
-            }
+                /* =======================================================
+                   INSTALL PIP
+                ======================================================= */
+                stage('Install pip') {
+                    container('python') {
+                        sh '''
+                            curl -sS https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+                            python3 get-pip.py
+                            pip --version
+                        '''
+                    }
+                }
 
-            stage('Run Code Coverage') {
-                sh '''
-                    export PATH="$HOME/.local/bin:$PATH"
-                    export PYTHONPATH=$(pwd)
+                /* =======================================================
+                   INSTALL POETRY
+                ======================================================= */
+                stage('Install Poetry') {
+                    container('python') {
+                        sh '''
+                            pip install poetry
+                            poetry --version
+                        '''
+                    }
+                }
 
-                    poetry run pytest \
-                        --ignore=client/tests/test_postgres_conn.py \
-                        --ignore=client/tests/test_redis_conn.py \
-                        --cov=. \
-                        --cov-report=term \
-                        --cov-report=xml
-                '''
-            }
+                /* =======================================================
+                   INSTALL DEPENDENCIES
+                ======================================================= */
+                stage('Install Dependencies') {
+                    container('python') {
+                        sh '''
+                            poetry config virtualenvs.create true
+                            poetry config virtualenvs.in-project true
+                            poetry install --no-root
+                        '''
+                    }
+                }
 
-        } catch (err) {
-            status = 'FAILURE'
-            throw err
+                /* =======================================================
+                   RUN CODE COVERAGE
+                ======================================================= */
+                stage('Run Code Coverage') {
+                    container('python') {
+                        sh '''
+                            poetry run pytest \
+                                --ignore=client/tests/test_postgres_conn.py \
+                                --ignore=client/tests/test_redis_conn.py \
+                                --cov=. \
+                                --cov-report=term \
+                                --cov-report=xml
+                        '''
+                    }
+                }
 
-        } finally {
+            } catch (err) {
 
-            // =================================================
-            // Notifications
-            // =================================================
-            def timestamp = sh(
-                script: "TZ=Asia/Kolkata date +'%Y-%m-%d %H:%M:%S'",
-                returnStdout: true
-            ).trim()
+                status = 'FAILURE'
+                throw err
 
-            def message = """${projectName} - ${status}
+            } finally {
+
+                /* =======================================================
+                   NOTIFICATIONS
+                ======================================================= */
+                def timestamp = sh(
+                    script: "TZ=Asia/Kolkata date +'%Y-%m-%d %H:%M:%S'",
+                    returnStdout: true
+                ).trim()
+
+                def message = """${projectName} - ${status}
 
 Job Name    : ${env.JOB_NAME}
 Build No    : #${env.BUILD_NUMBER}
@@ -103,22 +121,21 @@ Build URL:
 ${env.BUILD_URL}
 """
 
-            // Slack Notification
-            slackSend(
-                channel: config.slackChannel ?: '#jenkins-alerts',
-                message: message,
-                tokenCredentialId: config.slackTokenId ?: 'slack-token'
-            )
-
-            // Email Notification
-            try {
-                mail(
-                    to: config.emailRecipients ?: 'rule29breaker@gmail.com',
-                    subject: "${projectName} - ${status} | Build #${env.BUILD_NUMBER}",
-                    body: message
+                slackSend(
+                    channel: config.slackChannel ?: '#jenkins-alerts',
+                    message: message,
+                    tokenCredentialId: config.slackTokenId ?: 'slack-token'
                 )
-            } catch (e) {
-                echo "Email notification failed, continuing pipeline"
+
+                try {
+                    mail(
+                        to: config.emailRecipients ?: 'rule29breaker@gmail.com',
+                        subject: "${projectName} - ${status} | Build #${env.BUILD_NUMBER}",
+                        body: message
+                    )
+                } catch (e) {
+                    echo "Email notification failed"
+                }
             }
         }
     }
